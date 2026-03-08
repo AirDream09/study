@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Nexus Study OS | Elite Wave</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --bg-black: #000000;
+            --bg-base: #121212;
+            --bg-surface: #1e1e1e;
+            --bg-hover: #2a2a2a;
+            --spotify-green: #1db954;
+            --spotify-green-hover: #1ed760;
+            --text-main: #ffffff;
+            --text-dim: #b3b3b3;
+            --border: #282828;
+        }
+
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+        body {
+            margin: 0; background: var(--bg-black); color: var(--text-main);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            display: grid; grid-template-columns: 300px 1fr 300px;
+            grid-template-rows: 1fr 90px; height: 100vh; overflow: hidden;
+        }
+
+        /* SIDEBARS */
+        .sidebar { background: var(--bg-black); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+        .card { background: var(--bg-base); border-radius: 8px; padding: 16px; transition: 0.3s; }
+        
+        /* PLAYLIST SPOTIFY STYLE */
+        .playlist-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .playlist-scroll { flex: 1; overflow-y: auto; margin-top: 12px; }
+        .song-row { 
+            display: grid; grid-template-columns: 32px 1fr 32px; align-items: center;
+            padding: 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; color: var(--text-dim);
+        }
+        .song-row:hover { background: var(--bg-hover); color: white; }
+        .song-row.active { color: var(--spotify-green); }
+        .song-row .del-btn { opacity: 0; transition: 0.2s; text-align: right; }
+        .song-row:hover .del-btn { opacity: 1; color: #ff4444; }
+
+        /* EDITOR AREA */
+        .main-workspace { background: linear-gradient(to bottom, #1e1e1e, #121212); border-radius: 8px; margin-top: 8px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+        .toolbar { 
+            padding: 12px 24px; display: flex; gap: 8px; align-items: center; 
+            background: rgba(0,0,0,0.2); backdrop-filter: blur(10px); z-index: 10;
+        }
+        .editor-box { flex: 1; overflow-y: auto; padding: 40px 15%; }
+        #editor { 
+            min-height: 100%; outline: none; line-height: 1.6; font-size: 1.1rem; color: #e0e0e0;
+            white-space: pre-wrap; word-wrap: break-word;
+        }
+
+        /* BUTTONS */
+        .btn { 
+            background: var(--bg-hover); border: none; color: white; padding: 8px 14px; 
+            border-radius: 20px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: 0.2s;
+        }
+        .btn:hover { transform: scale(1.05); background: #333; }
+        .btn-green { background: var(--spotify-green); color: black; }
+        .btn-green:hover { background: var(--spotify-green-hover); }
+
+        /* SPOTIFY PLAYER BAR */
+        .player-bar { 
+            grid-column: 1 / 4; background: var(--bg-black); display: grid; 
+            grid-template-columns: 1fr 2fr 1fr; align-items: center; padding: 0 16px;
+        }
+        .current-track { display: flex; align-items: center; gap: 12px; }
+        .track-img { width: 56px; height: 56px; background: #282828; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+        
+        .player-controls { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .control-btns { display: flex; align-items: center; gap: 24px; }
+        .play-btn { 
+            width: 32px; height: 32px; background: white; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; color: black; border: none; cursor: pointer;
+        }
+        .play-btn:hover { transform: scale(1.1); }
+
+        .progress-container { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 500px; }
+        .progress-bar { flex: 1; height: 4px; background: #4d4d4d; border-radius: 2px; position: relative; cursor: pointer; }
+        .progress-fill { height: 100%; background: white; border-radius: 2px; width: 0%; transition: width 0.1s linear; }
+        .progress-bar:hover .progress-fill { background: var(--spotify-green); }
+        .time-label { font-size: 0.7rem; color: var(--text-dim); min-width: 30px; }
+
+        .volume-controls { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding-right: 16px; }
+        input[type=range] { accent-color: var(--spotify-green); cursor: pointer; width: 100px; }
+
+        /* FOCUS MODE */
+        .hidden-ui { display: none !important; }
+        .focus-active { grid-template-columns: 0 1fr 0 !important; }
+
+        #t-display { 
+            font-size: 2.2rem; font-family: 'JetBrains Mono'; color: white;
+            background: transparent; border: none; width: 100%; text-align: center; outline: none;
+        }
+    </style>
+</head>
+<body id="app-body">
+
+    <aside class="sidebar" id="side-left">
+        <div class="card">
+            <h3 style="font-size: 0.8rem; margin: 0 0 15px 0; color: var(--text-dim);">FOCUS TIMER</h3>
+            <input type="text" id="t-display" value="25:00" onfocus="pauseTimer()" onblur="validateTime()">
+            <div style="display:flex; gap:8px; margin-top:10px;">
+                <button class="btn btn-green" onclick="toggleTimer()" id="t-btn" style="flex:1">START</button>
+                <button class="btn" onclick="resetTimer()">↺</button>
+            </div>
+        </div>
+
+        <div class="card playlist-container">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-size: 0.8rem; margin: 0; color: var(--text-dim);">DEINE BIBLIOTHEK</h3>
+                <button class="btn" onclick="document.getElementById('m-up').click()" style="padding: 4px 10px;">+</button>
+            </div>
+            <input type="file" id="m-up" class="hidden-ui" multiple accept="audio/*" onchange="uploadLocal(event)">
+            <div id="playlist-list" class="playlist-scroll"></div>
+        </div>
+    </aside>
+
+    <main class="main-workspace">
+        <div class="toolbar">
+            <button class="btn" onclick="document.getElementById('file-in').click()">📂 Import</button>
+            <input type="file" id="file-in" class="hidden-ui" onchange="importFile(event)">
+            <div style="width:1px; height:20px; background:var(--border); margin:0 8px;"></div>
+            <button class="btn" onclick="cmd('bold')">B</button>
+            <button class="btn" onclick="cmd('italic')">I</button>
+            <button class="btn" onclick="cmd('insertUnorderedList')">List</button>
+            <button class="btn" onclick="toggleFocus()" title="Focus Mode">👁️</button>
+            
+            <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                <span id="word-count" style="font-size: 0.7rem; color: var(--text-dim);">0 Wörter</span>
+                <button class="btn btn-green" onclick="exportDoc()">SPEICHERN</button>
+            </div>
+        </div>
+        <div class="editor-box">
+            <div id="editor" contenteditable="true" oninput="onEditorInput()" spellcheck="false">Fange hier an zu schreiben...</div>
+        </div>
+    </main>
+
+    <aside class="sidebar" id="side-right">
+        <div class="card" style="flex:1; display:flex; flex-direction:column;">
+            <h3 style="font-size: 0.8rem; margin: 0 0 10px 0; color: var(--text-dim);">QUICK NOTES</h3>
+            <textarea id="ai-input" placeholder="Schnelle Gedanken..." oninput="saveNotes()" style="flex:1; background:transparent; border:1px solid var(--border); border-radius:8px; color:white; padding:10px; resize:none; outline:none; font-family:inherit;"></textarea>
+        </div>
+        <div class="card">
+            <h3 style="font-size: 0.8rem; margin: 0 0 5px 0; color: var(--text-dim);">SESSION DAUER</h3>
+            <div id="session-time" style="font-size: 1.2rem; font-family: 'JetBrains Mono';">00:00:00</div>
+        </div>
+    </aside>
+
+    <footer class="player-bar">
+        <div class="current-track">
+            <div class="track-img">🎵</div>
+            <div>
+                <div id="track-name" style="font-size: 0.85rem; font-weight: 500; margin-bottom: 2px;">Kein Titel</div>
+                <div style="font-size: 0.7rem; color: var(--text-dim);">Nexus Study OS</div>
+            </div>
+        </div>
+
+        <div class="player-controls">
+            <div class="control-btns">
+                <button onclick="prevTrack()" style="background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:1.2rem;">⏮</button>
+                <button class="play-btn" id="play-trigger" onclick="togglePlay()">▶</button>
+                <button onclick="nextTrack()" style="background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:1.2rem;">⏭</button>
+            </div>
+            <div class="progress-container">
+                <span class="time-label" id="cur-t">0:00</span>
+                <div class="progress-bar" onclick="seek(event)">
+                    <div id="prog-bar" class="progress-fill"></div>
+                </div>
+                <span class="time-label" id="dur-t">0:00</span>
+            </div>
+        </div>
+
+        <div class="volume-controls">
+            <span style="font-size: 1rem; color: var(--text-dim);">🔉</span>
+            <input type="range" min="0" max="100" value="80" oninput="audio.volume = this.value/100">
+        </div>
+    </footer>
+
+    <audio id="main-audio" ontimeupdate="updateUI()" onended="nextTrack()" onplay="setPlayUI(true)" onpause="setPlayUI(false)"></audio>
+
+    <script>
+        let playlist = [], curIdx = 0, timer, timeLeft = 1500, db, sessionSeconds = 0;
+        const audio = document.getElementById('main-audio');
+
+        // DB SETUP
+        const req = indexedDB.open("NexusEliteDB", 1);
+        req.onupgradeneeded = e => e.target.result.createObjectStore("songs", { keyPath: "name" });
+        req.onsuccess = e => { db = e.target.result; loadFromDB(); };
+
+        // EDITOR
+        function onEditorInput() { saveNotes(); updateWordCount(); }
+        function saveNotes() {
+            localStorage.setItem('nexus_elite_editor', document.getElementById('editor').innerHTML);
+            localStorage.setItem('nexus_elite_notes', document.getElementById('ai-input').value);
+        }
+        function updateWordCount() {
+            const text = document.getElementById('editor').innerText.trim();
+            document.getElementById('word-count').innerText = (text ? text.split(/\s+/).length : 0) + " Wörter";
+        }
+        function cmd(c, v=null) { document.execCommand(c, false, v); onEditorInput(); }
+
+        function toggleFocus() {
+            document.getElementById('app-body').classList.toggle('focus-active');
+            document.getElementById('side-left').classList.toggle('hidden-ui');
+            document.getElementById('side-right').classList.toggle('hidden-ui');
+        }
+
+        // MUSIC
+        function loadFromDB() {
+            const tx = db.transaction("songs", "readonly");
+            tx.objectStore("songs").getAll().onsuccess = e => {
+                playlist = e.target.result.map(s => ({ name: s.name, url: URL.createObjectURL(s.data) }));
+                renderPlaylist();
+            };
+        }
+
+        function renderPlaylist() {
+            const list = document.getElementById('playlist-list');
+            list.innerHTML = playlist.map((s, i) => `
+                <div class="song-row ${i===curIdx?'active':''}" onclick="playTrack(${i})">
+                    <span>${i+1}</span>
+                    <span style="color:white">${s.name}</span>
+                    <span class="del-btn" onclick="event.stopPropagation(); deleteSong('${s.name}')">✕</span>
+                </div>
+            `).join('');
+        }
+
+        async function uploadLocal(e) {
+            for(let f of e.target.files) {
+                const tx = db.transaction("songs", "readwrite");
+                tx.objectStore("songs").put({ name: f.name, data: f });
+            }
+            setTimeout(loadFromDB, 500);
+        }
+
+        function deleteSong(n) { db.transaction("songs", "readwrite").objectStore("songs").delete(n); loadFromDB(); }
+
+        function playTrack(i) {
+            if(!playlist[i]) return;
+            curIdx = i;
+            audio.src = playlist[i].url;
+            audio.play();
+            document.getElementById('track-name').innerText = playlist[i].name;
+            renderPlaylist();
+        }
+
+        function togglePlay() { audio.paused ? audio.play() : audio.pause(); }
+        function nextTrack() { playTrack((curIdx + 1) % playlist.length); }
+        function prevTrack() { playTrack((curIdx - 1 + playlist.length) % playlist.length); }
+        function setPlayUI(p) { document.getElementById('play-trigger').innerText = p ? "⏸" : "▶"; }
+
+        function updateUI() {
+            const p = (audio.currentTime / audio.duration) * 100;
+            document.getElementById('prog-bar').style.width = p + "%";
+            document.getElementById('cur-t').innerText = formatTime(audio.currentTime);
+            document.getElementById('dur-t').innerText = formatTime(audio.duration);
+        }
+
+        function formatTime(s) {
+            if(!s) return "0:00";
+            let m=Math.floor(s/60), sec=Math.floor(s%60);
+            return `${m}:${sec < 10 ? '0'+sec : sec}`;
+        }
+
+        function seek(e) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
+        }
+
+        // TIMER
+        function toggleTimer() {
+            if(timer) { clearInterval(timer); timer = null; document.getElementById('t-btn').innerText = "START"; }
+            else {
+                validateTime();
+                timer = setInterval(() => {
+                    if(timeLeft > 0) { timeLeft--; updateTimerDisplay(); }
+                    else { clearInterval(timer); alert("Zeit für eine Pause!"); resetTimer(); }
+                }, 1000);
+                document.getElementById('t-btn').innerText = "PAUSE";
+            }
+        }
+        function updateTimerDisplay() {
+            let m=Math.floor(timeLeft/60), s=timeLeft%60;
+            document.getElementById('t-display').value = `${m}:${s < 10 ? '0'+s : s}`;
+        }
+        function resetTimer() { clearInterval(timer); timer = null; timeLeft = 1500; updateTimerDisplay(); document.getElementById('t-btn').innerText = "START"; }
+        function validateTime() {
+            const parts = document.getElementById('t-display').value.split(':');
+            timeLeft = parts.length === 2 ? (parseInt(parts[0]) * 60) + parseInt(parts[1]) : parseInt(parts[0]) * 60;
+        }
+
+        // SYSTEM
+        function startSessionTimer() {
+            setInterval(() => {
+                sessionSeconds++;
+                const h = Math.floor(sessionSeconds / 3600).toString().padStart(2, '0');
+                const m = Math.floor((sessionSeconds % 3600) / 60).toString().padStart(2, '0');
+                const s = (sessionSeconds % 60).toString().padStart(2, '0');
+                document.getElementById('session-time').innerText = `${h}:${m}:${s}`;
+            }, 1000);
+        }
+
+        function exportDoc() {
+            const html = `<html><body style="font-family:sans-serif; padding:50px; background:#fff; line-height:1.6;">${document.getElementById('editor').innerHTML}</body></html>`;
+            saveAs(new Blob([html], {type: 'text/html'}), "StudySession.html");
+        }
+
+        function importFile(e) {
+            const r = new FileReader();
+            r.onload = f => { document.getElementById('editor').innerHTML = f.target.result; onEditorInput(); };
+            r.readAsText(e.target.files[0]);
+        }
+
+        window.onload = () => {
+            document.getElementById('editor').innerHTML = localStorage.getItem('nexus_elite_editor') || "Starte dein Projekt...";
+            document.getElementById('ai-input').value = localStorage.getItem('nexus_elite_notes') || "";
+            startSessionTimer();
+            updateWordCount();
+        }
+    </script>
+</body>
+</html>
